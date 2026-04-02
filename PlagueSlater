@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Classroom Pandemic Simulator</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: #f8fafc;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  h1 {
+    text-align: center;
+    color: #93c5fd;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #cbd5e1;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .map-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 1100px;
+    margin: 0 auto;
+    border: 3px solid #334155;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #1e293b;
+  }
+  #worldMap {
+    width: 100%;
+    display: block;
+    user-select: none;
+  }
+  .continent-hotspot {
+    position: absolute;
+    border: 2px dashed rgba(255,255,255,0.12);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+  .continent-hotspot:hover {
+    background: rgba(59,130,246,0.18);
+  }
+  .infection-dot {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: #ef4444;
+    border-radius: 50%;
+    box-shadow: 0 0 10px #ef4444;
+    transform: translate(-50%, -50%);
+    animation: pulse 1.6s infinite;
+    pointer-events: none;
+  }
+  .treatment-dot {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: #22c55e;
+    border-radius: 50%;
+    box-shadow: 0 0 12px #22c55e;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .outbreak-ring {
+    position: absolute;
+    width: 26px;
+    height: 26px;
+    border: 3px solid rgba(239,68,68,0.85);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: ring 1.2s ease-out forwards;
+    pointer-events: none;
+  }
+  .travel-line {
+    position: absolute;
+    height: 3px;
+    background: rgba(255,255,255,0.7);
+    transform-origin: 0 50%;
+    pointer-events: none;
+    border-radius: 3px;
+    animation: fadeLine 1.4s ease-out forwards;
+  }
+  @keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    50% { transform: translate(-50%, -50%) scale(1.4); opacity: 0.7; }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+  @keyframes ring {
+    0% { transform: translate(-50%, -50%) scale(0.6); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+  }
+  @keyframes fadeLine {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  .panel {
+    margin-top: 16px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 14px;
+    padding: 14px;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 10px;
+  }
+  .stat-box {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+  }
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  button {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+  button:hover { background: #1d4ed8; }
+  button:disabled { background: #475569; cursor: not-allowed; }
+  .log {
+    margin-top: 12px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 10px;
+    height: 220px;
+    overflow-y: auto;
+    font-size: 14px;
+  }
+  .progress {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .bar-wrap {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 8px;
+  }
+  .bar-label {
+    font-size: 13px;
+    margin-bottom: 6px;
+    color: #cbd5e1;
+  }
+  .bar {
+    width: 100%;
+    height: 18px;
+    background: #334155;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    width: 0%;
+    transition: width 0.5s ease;
+  }
+  .infected-fill { background: #ef4444; }
+  .dead-fill { background: #f97316; }
+  .cured-fill { background: #22c55e; }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999;
+  }
+  .modal {
+    background: #1e293b;
+    width: min(94vw, 560px);
+    border-radius: 16px;
+    padding: 20px;
+    border: 2px solid #334155;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .modal h2 {
+    margin-top: 0;
+    color: #93c5fd;
+  }
+  .modal p {
+    color: #cbd5e1;
+  }
+  .field {
+    margin-bottom: 14px;
+  }
+  .field label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+  }
+  .field input[type="text"], .field select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #64748b;
+    background: #0f172a;
+    color: white;
+    box-sizing: border-box;
+  }
+  .checkbox-grid, .radio-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+    gap: 8px;
+  }
+  .option {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 8px;
+  }
+  .slider-row {
+    margin-bottom: 12px;
+  }
+  .slider-row input[type="range"] {
+    width: 100%;
+  }
+  .slider-value {
+    font-weight: bold;
+    color: #fbbf24;
+  }
+  .total-score {
+    background: #0f172a;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    font-size: 18px;
+    margin-top: 8px;
+    text-align: center;
+  }
+  .hidden { display: none !important; }
+  .legend {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #cbd5e1;
+  }
+  .small {
+    font-size: 12px;
+    color: #94a3b8;
+  }
+  .end-banner {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: bold;
+    text-align: center;
+    font-size: 18px;
+  }
+  .win { background: rgba(239,68,68,0.15); border: 2px solid #ef4444; color: #fecaca; }
+  .lose { background: rgba(34,197,94,0.15); border: 2px solid #22c55e; color: #bbf7d0; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Classroom Pandemic Simulator</h1>
+  <div class="subtitle">
+    A simplified, educational disease spread model inspired by strategy simulation games.
+  </div>
+
+  <div class="map-wrapper" id="mapWrapper">
+    <img
+      id="worldMap"
+      alt="World Map"
+      src="data:image/svg+xml;utf8,
+      <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 500'>
+        <rect width='1000' height='500' fill='%230b4f6c'/>
+        <g fill='%236b8e23' stroke='%232f4f1d' stroke-width='2'>
+          <path d='M75,120 L170,90 L250,110 L280,150 L240,190 L180,210 L130,180 L90,150 Z' />
+          <path d='M240,220 L290,250 L310,330 L270,420 L220,390 L205,300 Z' />
+          <path d='M430,100 L500,80 L600,95 L640,130 L620,170 L540,180 L470,165 L430,140 Z' />
+          <path d='M460,190 L520,200 L580,250 L570,330 L520,410 L470,390 L440,320 L430,240 Z' />
+          <path d='M680,120 L760,100 L860,110 L930,160 L900,220 L820,230 L770,200 L720,180 L680,150 Z' />
+          <path d='M740,250 L820,260 L860,300 L840,360 L780,380 L720,340 L710,290 Z' />
+          <path d='M860,360 L920,380 L900,430 L840,420 Z' />
+        </g>
+        <text x='150' y='70' fill='white' font-size='22'>North America</text>
+        <text x='210' y='470' fill='white' font-size='22'>South America</text>
+        <text x='500' y='60' fill='white' font-size='22'>Europe</text>
+        <text x='500' y='450' fill='white' font-size='22'>Africa</text>
+        <text x='780' y='70' fill='white' font-size='22'>Asia</text>
+        <text x='810' y='460' fill='white' font-size='22'>Australia</text>
+      </svg>"
+    />
+
+    <div class="continent-hotspot" data-continent="North America" style="left:8%; top:18%; width:22%; height:26%;"></div>
+    <div class="continent-hotspot" data-continent="South America" style="left:20%; top:44%; width:12%; height:36%;"></div>
+    <div class="continent-hotspot" data-continent="Europe" style="left:42%; top:16%; width:18%; height:18%;"></div>
+    <div class="continent-hotspot" data-continent="Africa" style="left:42%; top:36%; width:18%; height:40%;"></div>
+    <div class="continent-hotspot" data-continent="Asia" style="left:66%; top:14%; width:26%; height:34%;"></div>
+    <div class="continent-hotspot" data-continent="Australia" style="left:72%; top:56%; width:16%; height:22%;"></div>
+  </div>
+
+  <div class="panel">
+    <div class="stats">
+      <div class="stat-box"><strong>Type:</strong> <span id="typeDisplay">Not chosen</span></div>
+      <div class="stat-box"><strong>Disease:</strong> <span id="diseaseNameDisplay">Not chosen</span></div>
+      <div class="stat-box"><strong>Start:</strong> <span id="continentDisplay">Not chosen</span></div>
+      <div class="stat-box"><strong>Vector:</strong> <span id="vectorDisplay">Not chosen</span></div>
+      <div class="stat-box"><strong>Symptoms:</strong> <span id="symptomsDisplay">None</span></div>
+      <div class="stat-box"><strong>Score:</strong> <span id="scoreDisplay">0</span></div>
+      <div class="stat-box"><strong>Day:</strong> <span id="dayDisplay">0</span></div>
+      <div class="stat-box"><strong>Status:</strong> <span id="statusDisplay">Setup in progress</span></div>
+    </div>
+
+    <div class="progress">
+      <div class="bar-wrap">
+        <div class="bar-label">Global Infected: <span id="infectedNum">0</span> / <span id="popNum">600</span></div>
+        <div class="bar"><div class="bar-fill infected-fill" id="infectedBar"></div></div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label">Deaths: <span id="deadNum">0</span></div>
+        <div class="bar"><div class="bar-fill dead-fill" id="deadBar"></div></div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label">Recovered / Treated: <span id="curedNum">0</span></div>
+        <div class="bar"><div class="bar-fill cured-fill" id="curedBar"></div></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" disabled>GO</button>
+      <button id="pauseBtn" disabled>Pause</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+
+    <div class="legend">
+      Infect the world before humanity stops your disease. After a few days, treatments and mutations may appear.
+    </div>
+    <div class="small">
+      Simplified educational model only — not a real epidemiology tool.
+    </div>
+
+    <div class="log" id="log"></div>
+    <div id="endBanner"></div>
+  </div>
+</div>
+
+<!-- Setup Modal -->
+<div class="modal-overlay" id="modalSetup">
+  <div class="modal">
+    <h2>Create Your Pathogen</h2>
+
+    <div class="field">
+      <label for="pathogenType">Pathogen Type</label>
+      <select id="pathogenType">
+        <option value="Virus">Virus</option>
+        <option value="Bacteria">Bacteria</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="diseaseNameInput">Name</label>
+      <input type="text" id="diseaseNameInput" maxlength="30" placeholder="Ex: Crimson Fever">
+    </div>
+
+    <p>Click <strong>Continue</strong>, then click a continent on the map to choose where it begins.</p>
+    <button id="saveSetupBtn">Continue</button>
+  </div>
+</div>
+
+<!-- Symptoms -->
+<div class="modal-overlay hidden" id="modalSymptoms">
+  <div class="modal">
+    <h2>Choose Symptoms</h2>
+    <p>Select one or more symptoms.</p>
+    <div class="checkbox-grid">
+      <label class="option"><input type="checkbox" value="Sneezing"> Sneezing</label>
+      <label class="option"><input type="checkbox" value="Coughing"> Coughing</label>
+      <label class="option"><input type="checkbox" value="Fever"> Fever</label>
+      <label class="option"><input type="checkbox" value="Sweating"> Sweating</label>
+      <label class="option"><input type="checkbox" value="Vomiting"> Vomiting</label>
+    </div>
+    <div style="margin-top: 14px;">
+      <button id="saveSymptomsBtn">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Vector -->
+<div class="modal-overlay hidden" id="modalVector">
+  <div class="modal">
+    <h2>Choose a Vector</h2>
+    <p>How is the disease mainly spread?</p>
+    <div class="radio-grid">
+      <label class="option"><input type="radio" name="vector" value="Rodent"> Rodent</label>
+      <label class="option"><input type="radio" name="vector" value="Insects"> Insects</label>
+      <label class="option"><input type="radio" name="vector" value="Waterborne"> Waterborne</label>
+      <label class="option"><input type="radio" name="vector" value="Airborne"> Airborne</label>
+    </div>
+    <div style="margin-top: 14px;">
+      <button id="saveVectorBtn">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Traits -->
+<div class="modal-overlay hidden" id="modalTraits">
+  <div class="modal">
+    <h2>Set Pathogen Traits</h2>
+    <p>Choose values for lethality, infectivity, and visibility.</p>
+
+    <div class="slider-row">
+      <label>Lethality: <span class="slider-value" id="lethalityVal">0</span></label>
+      <input type="range" id="lethality" min="0" max="3" value="0">
+    </div>
+
+    <div class="slider-row">
+      <label>Infectivity: <span class="slider-value" id="infectivityVal">0</span></label>
+      <input type="range" id="infectivity" min="0" max="3" value="0">
+    </div>
+
+    <div class="slider-row">
+      <label>Visibility: <span class="slider-value" id="visibilityVal">1</span></label>
+      <input type="range" id="visibility" min="1" max="3" value="1">
+    </div>
+
+    <div class="total-score">
+      Total Score: <span id="totalScoreModal">1</span>
+    </div>
+
+    <div style="margin-top: 14px;">
+      <button id="saveTraitsBtn">Finish Setup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Treatment Modal -->
+<div class="modal-overlay hidden" id="modalTreatment">
+  <div class="modal">
+    <h2 id="treatmentTitle">Treatment Response</h2>
+    <p id="treatmentText">Choose a treatment and where to deploy it.</p>
+
+    <div class="field">
+      <label for="treatmentChoice">Treatment</label>
+      <select id="treatmentChoice"></select>
+    </div>
+
+    <div class="field">
+      <label for="treatmentLocation">Deploy to Continent</label>
+      <select id="treatmentLocation">
+        <option>North America</option>
+        <option>South America</option>
+        <option>Europe</option>
+        <option>Africa</option>
+        <option>Asia</option>
+        <option>Australia</option>
+      </select>
+    </div>
+
+    <button id="saveTreatmentBtn">Deploy Treatment</button>
+  </div>
+</div>
+
+<!-- Mutation Modal -->
+<div class="modal-overlay hidden" id="modalMutation">
+  <div class="modal">
+    <h2>Mutation Event</h2>
+    <p>Your pathogen has a chance to mutate. Would you like to accept the mutation?</p>
+    <div class="controls">
+      <button id="acceptMutationBtn">Accept Mutation</button>
+      <button id="declineMutationBtn">Decline</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const TOTAL_WORLD_POP = 600; // simplified classroom scale
+
+  const continentData = {
+    "North America": { x: 19, y: 30, spreadX: 9, spreadY: 8, pop: 100, infected: 0, dead: 0, cured: 0, treated: false, coastal: true },
+    "South America": { x: 26, y: 60, spreadX: 5, spreadY: 12, pop: 80, infected: 0, dead: 0, cured: 0, treated: false, coastal: true },
+    "Europe": { x: 50, y: 24, spreadX: 6, spreadY: 5, pop: 90, infected: 0, dead: 0, cured: 0, treated: false, coastal: true },
+    "Africa": { x: 50, y: 52, spreadX: 7, spreadY: 12, pop: 110, infected: 0, dead: 0, cured: 0, treated: false, coastal: true },
+    "Asia": { x: 78, y: 28, spreadX: 11, spreadY: 10, pop: 180, infected: 0, dead: 0, cured: 0, treated: false, coastal: true },
+    "Australia": { x: 80, y: 66, spreadX: 6, spreadY: 6, pop: 40, infected: 0, dead: 0, cured: 0, treated: false, coastal: true }
+  };
+
+  const continents = Object.keys(continentData);
+
+  const state = {
+    pathogenType: "",
+    diseaseName: "",
+    startContinent: "",
+    symptoms: [],
+    vector: "",
+    lethality: 0,
+    infectivity: 0,
+    visibility: 1,
+    totalScore: 0,
+    day: 0,
+    globalInfected: 0,
+    globalDead: 0,
+    globalCured: 0,
+    running: false,
+    paused: false,
+    timer: null,
+    treatmentTriggered: false,
+    mutationTriggered: false,
+    mutationAccepted: false,
+    treatmentType: "None",
+    treatmentLocation: "",
+    treatmentStrength: 0,
+    internationalBonus: 0,
+    ended: false
+  };
+
+  const mapWrapper = document.getElementById("mapWrapper");
+  const logBox = document.getElementById("log");
+  const startBtn = document.getElementById("startBtn");
+  const pauseBtn = document.getElementById("pauseBtn");
+  const resetBtn = document.getElementById("resetBtn");
+  const endBanner = document.getElementById("endBanner");
+
+  const displays = {
+    type: document.getElementById("typeDisplay"),
+    name: document.getElementById("diseaseNameDisplay"),
+    continent: document.getElementById("continentDisplay"),
+    vector: document.getElementById("vectorDisplay"),
+    symptoms: document.getElementById("symptomsDisplay"),
+    score: document.getElementById("scoreDisplay"),
+    day: document.getElementById("dayDisplay"),
+    status: document.getElementById("statusDisplay"),
+    infectedNum: document.getElementById("infectedNum"),
+    deadNum: document.getElementById("deadNum"),
+    curedNum: document.getElementById("curedNum"),
+    popNum: document.getElementById("popNum"),
+    infectedBar: document.getElementById("infectedBar"),
+    deadBar: document.getElementById("deadBar"),
+    curedBar: document.getElementById("curedBar")
+  };
+
+  displays.popNum.textContent = TOTAL_WORLD_POP;
+
+  // Modals
+  const modalSetup = document.getElementById("modalSetup");
+  const modalSymptoms = document.getElementById("modalSymptoms");
+  const modalVector = document.getElementById("modalVector");
+  const modalTraits = document.getElementById("modalTraits");
+  const modalTreatment = document.getElementById("modalTreatment");
+  const modalMutation = document.getElementById("modalMutation");
+
+  // Setup Step 1
+  document.getElementById("saveSetupBtn").addEventListener("click", () => {
+    const type = document.getElementById("pathogenType").value;
+    const name = document.getElementById("diseaseNameInput").value.trim();
+
+    if (!name) {
+      alert("Please enter a pathogen name.");
+      return;
+    }
+
+    state.pathogenType = type;
+    state.diseaseName = name;
+
+    displays.type.textContent = type;
+    displays.name.textContent = name;
+    displays.status.textContent = "Choose a starting continent";
+
+    modalSetup.classList.add("hidden");
+    addLog(`Created ${type.toLowerCase()}: ${name}`);
+    addLog("Click a continent on the map to choose where the outbreak begins.");
+  });
+
+  // Continent selection
+  document.querySelectorAll(".continent-hotspot").forEach(h => {
+    h.addEventListener("click", () => {
+      if (!state.diseaseName || state.startContinent) return;
+
+      state.startContinent = h.dataset.continent;
+      displays.continent.textContent = state.startContinent;
+      displays.status.textContent = "Choose symptoms";
+
+      addLog(`Initial release in ${state.startContinent}.`);
+      modalSymptoms.classList.remove("hidden");
+    });
+  });
+
+  // Symptoms
+  document.getElementById("saveSymptomsBtn").addEventListener("click", () => {
+    const checked = Array.from(modalSymptoms.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+    if (checked.length === 0) {
+      alert("Choose at least one symptom.");
+      return;
+    }
+    state.symptoms = checked;
+    displays.symptoms.textContent = checked.join(", ");
+    modalSymptoms.classList.add("hidden");
+    modalVector.classList.remove("hidden");
+    displays.status.textContent = "Choose vector";
+    addLog(`Symptoms chosen: ${checked.join(", ")}.`);
+  });
+
+  // Vector
+  document.getElementById("saveVectorBtn").addEventListener("click", () => {
+    const selected = modalVector.querySelector('input[name="vector"]:checked');
+    if (!selected) {
+      alert("Choose a vector.");
+      return;
+    }
+    state.vector = selected.value;
+    displays.vector.textContent = state.vector;
+    modalVector.classList.add("hidden");
+    modalTraits.classList.remove("hidden");
+    displays.status.textContent = "Set pathogen traits";
+    addLog(`Vector selected: ${state.vector}.`);
+  });
+
+  // Trait sliders
+  const lethality = document.getElementById("lethality");
+  const infectivity = document.getElementById("infectivity");
+  const visibility = document.getElementById("visibility");
+
+  const lethalityVal = document.getElementById("lethalityVal");
+  const infectivityVal = document.getElementById("infectivityVal");
+  const visibilityVal = document.getElementById("visibilityVal");
+  const totalScoreModal = document.getElementById("totalScoreModal");
+
+  function updateTraitDisplay() {
+    lethalityVal.textContent = lethality.value;
+    infectivityVal.textContent = infectivity.value;
+    visibilityVal.textContent = visibility.value;
+    totalScoreModal.textContent = Number(lethality.value) + Number(infectivity.value) + Number(visibility.value);
+  }
+  lethality.addEventListener("input", updateTraitDisplay);
+  infectivity.addEventListener("input", updateTraitDisplay);
+  visibility.addEventListener("input", updateTraitDisplay);
+  updateTraitDisplay();
+
+  document.getElementById("saveTraitsBtn").addEventListener("click", () => {
+    state.lethality = Number(lethality.value);
+    state.infectivity = Number(infectivity.value);
+    state.visibility = Number(visibility.value);
+    state.totalScore = state.lethality + state.infectivity + state.visibility;
+
+    displays.score.textContent = state.totalScore;
+    displays.status.textContent = "Ready to start";
+    modalTraits.classList.add("hidden");
+    startBtn.disabled = false;
+
+    addLog(`Traits set: L${state.lethality} / I${state.infectivity} / V${state.visibility}`);
+    addLog(`Total score = ${state.totalScore}. Click GO to start.`);
+  });
+
+  // Buttons
+  startBtn.addEventListener("click", startSimulation);
+  pauseBtn.addEventListener("click", togglePause);
+  resetBtn.addEventListener("click", resetGame);
+
+  function startSimulation() {
+    if (state.running || state.ended) return;
+
+    state.running = true;
+    state.paused = false;
+    startBtn.disabled = true;
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = "Pause";
+    displays.status.textContent = "Simulation running";
+
+    seedInitialInfection();
+
+    addLog(`${state.diseaseName} has begun spreading...`);
+    tick(); // immediate
+    state.timer = setInterval(tick, 1200);
+  }
+
+  function togglePause() {
+    if (!state.running || state.ended) return;
+
+    state.paused = !state.paused;
+    if (state.paused) {
+      pauseBtn.textContent = "Resume";
+      displays.status.textContent = "Paused";
+    } else {
+      pauseBtn.textContent = "Pause";
+      displays.status.textContent = "Simulation running";
+    }
+  }
+
+  function resetGame() {
+    clearInterval(state.timer);
+
+    // reset state
+    state.pathogenType = "";
+    state.diseaseName = "";
+    state.startContinent = "";
+    state.symptoms = [];
+    state.vector = "";
+    state.lethality = 0;
+    state.infectivity = 0;
+    state.visibility = 1;
+    state.totalScore = 0;
+    state.day = 0;
+    state.globalInfected = 0;
+    state.globalDead = 0;
+    state.globalCured = 0;
+    state.running = false;
+    state.paused = false;
+    state.timer = null;
+    state.treatmentTriggered = false;
+    state.mutationTriggered = false;
+    state.mutationAccepted = false;
+    state.treatmentType = "None";
+    state.treatmentLocation = "";
+    state.treatmentStrength = 0;
+    state.internationalBonus = 0;
+    state.ended = false;
+
+    // reset continents
+    continents.forEach(c => {
+      continentData[c].infected = 0;
+      continentData[c].dead = 0;
+      continentData[c].cured = 0;
+      continentData[c].treated = false;
+    });
+
+    // reset UI
+    displays.type.textContent = "Not chosen";
+    displays.name.textContent = "Not chosen";
+    displays.continent.textContent = "Not chosen";
+    displays.vector.textContent = "Not chosen";
+    displays.symptoms.textContent = "None";
+    displays.score.textContent = "0";
+    displays.day.textContent = "0";
+    displays.status.textContent = "Setup in progress";
+    updateBars();
+
+    startBtn.disabled = true;
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = "Pause";
+
+    document.getElementById("pathogenType").value = "Virus";
+    document.getElementById("diseaseNameInput").value = "";
+
+    modalSetup.classList.remove("hidden");
+    modalSymptoms.classList.add("hidden");
+    modalVector.classList.add("hidden");
+    modalTraits.classList.add("hidden");
+    modalTreatment.classList.add("hidden");
+    modalMutation.classList.add("hidden");
+
+    modalSymptoms.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false);
+    modalVector.querySelectorAll('input[name="vector"]').forEach(rb => rb.checked = false);
+
+    lethality.value = 0;
+    infectivity.value = 0;
+    visibility.value = 1;
+    updateTraitDisplay();
+
+    clearMapEffects();
+    logBox.innerHTML = "";
+    endBanner.innerHTML = "";
+
+    addLog("Simulation reset.");
+  }
+
+  function seedInitialInfection() {
+    const c = continentData[state.startContinent];
+    c.infected = 3;
+    state.globalInfected = 3;
+
+    for (let i = 0; i < 3; i++) {
+      const pt = randomSpreadPoint(c);
+      createInfectionDot(pt.x, pt.y);
+    }
+    updateBars();
+  }
+
+  function tick() {
+    if (!state.running || state.paused || state.ended) return;
+
+    state.day++;
+    displays.day.textContent = state.day;
+
+    // Trigger treatment around day 6
+    if (state.day === 6 && !state.treatmentTriggered) {
+      state.treatmentTriggered = true;
+      pauseForTreatment();
+      return;
+    }
+
+    // Trigger mutation around day 10
+    if (state.day === 10 && !state.mutationTriggered) {
+      state.mutationTriggered = true;
+      pauseForMutation();
+      return;
+    }
+
+    spreadWithinContinents();
+    internationalSpread();
+    applyDeaths();
+    applyTreatment();
+    responseEvents();
+    updateBars();
+    checkEndConditions();
+  }
+
+  function spreadWithinContinents() {
+    const base = getBaseSpread();
+
+    if (state.totalScore < 2) {
+      // very weak pathogen - likely dies out
+      continents.forEach(cn => {
+        const c = continentData[cn];
+        if (c.infected > 0) {
+          const fade = Math.max(1, Math.floor(c.infected * 0.5));
+          c.infected = Math.max(0, c.infected - fade);
+          state.globalInfected = Math.max(0, state.globalInfected - fade);
+          addLog(`Day ${state.day}: ${state.diseaseName} struggles to spread in ${cn}.`);
+        }
+      });
+      return;
+    }
+
+    continents.forEach(cn => {
+      const c = continentData[cn];
+      const susceptible = c.pop - c.infected - c.dead - c.cured;
+      if (c.infected <= 0 || susceptible <= 0) return;
+
+      let spread = 0;
+
+      // Simplified logistic-ish spread
+      if (state.totalScore === 2) {
+        spread = Math.min(1, susceptible);
+      } else {
+        const localFactor = Math.ceil((c.infected / 8));
+        spread = Math.min(susceptible, Math.max(1, Math.floor(base + localFactor)));
+      }
+
+      // Vector bonuses
+      if (state.vector === "Insects") spread += 1;
+      if (state.vector === "Rodent") spread += 1;
+      if (state.vector === "Waterborne" && c.coastal) spread += 2;
+      if (state.vector === "Airborne") spread += 2;
+
+      // Visibility penalty (more visible disease = faster response)
+      spread -= Math.max(0, state.visibility - 1);
+
+      // Treatment penalty
+      if (c.treated) {
+        spread -= state.treatmentStrength;
+      }
+
+      // Mutation bonus
+      if (state.mutationAccepted) {
+        spread += 2;
+      }
+
+      spread = Math.max(0, Math.min(spread, susceptible));
+
+      if (spread > 0) {
+        c.infected += spread;
+        state.globalInfected += spread;
+
+        for (let i = 0; i < Math.min(spread, 6); i++) {
+          const pt = randomSpreadPoint(c);
+          createInfectionDot(pt.x, pt.y);
+          if (spread >= 5) createOutbreakRing(pt.x, pt.y);
+        }
+
+        addLog(`Day ${state.day}: ${spread} new infections in ${cn}.`);
+      }
+    });
+  }
+
+  function getBaseSpread() {
+    if (state.totalScore < 2) return 0;
+    if (state.totalScore === 2) return 1;
+    if (state.totalScore === 3) return 3;
+    return 6;
+  }
+
+  function internationalSpread() {
+    if (state.day < 4) return;
+
+    const infectedContinents = continents.filter(c => continentData[c].infected > 0);
+    const uninfectedContinents = continents.filter(c => continentData[c].infected === 0 && continentData[c].dead + continentData[c].cured < continentData[c].pop);
+
+    if (infectedContinents.length === 0 || uninfectedContinents.length === 0) return;
+
+    let chance = 0.08 + (state.totalScore * 0.02);
+
+    // vector-based travel bonuses
+    if (state.vector === "Airborne") chance += 0.18; // faster by airplane
+    if (state.vector === "Waterborne") chance += 0.12; // stronger by boat/coastal
+    if (state.vector === "Insects") chance += 0.06;
+    if (state.vector === "Rodent") chance += 0.05;
+
+    if (state.mutationAccepted) chance += 0.10;
+    chance += state.internationalBonus;
+
+    if (Math.random() < chance) {
+      const from = infectedContinents[Math.floor(Math.random() * infectedContinents.length)];
+      const to = uninfectedContinents[Math.floor(Math.random() * uninfectedContinents.length)];
+
+      const method = pickTravelMethod();
+      const seedCases = state.vector === "Airborne" && method === "airplane" ? 5 :
+                        state.vector === "Waterborne" && method === "boat" ? 5 :
+                        3;
+
+      continentData[to].infected += seedCases;
+      state.globalInfected += seedCases;
+
+      drawTravelLine(from, to);
+      for (let i = 0; i < Math.min(seedCases, 5); i++) {
+        const pt = randomSpreadPoint(continentData[to]);
+        createInfectionDot(pt.x, pt.y);
+      }
+
+      addLog(`Day ${state.day}: ${state.diseaseName} spread from ${from} to ${to} by ${method}!`);
+    }
+  }
+
+  function pickTravelMethod() {
+    if (state.vector === "Airborne") return Math.random() < 0.7 ? "airplane" : "boat";
+    if (state.vector === "Waterborne") return Math.random() < 0.7 ? "boat" : "airplane";
+    return Math.random() < 0.5 ? "airplane" : "boat";
+  }
+
+  function applyDeaths() {
+    continents.forEach(cn => {
+      const c = continentData[cn];
+      if (c.infected <= 0) return;
+
+      let deathRate = 0;
+      if (state.lethality === 0) deathRate = 0;
+      if (state.lethality === 1) deathRate = 0.03;
+      if (state.lethality === 2) deathRate = 0.07;
+      if (state.lethality === 3) deathRate = 0.12;
+
+      // viruses slightly less treatable, bacteria slightly more treatable unless mutation
+      if (state.pathogenType === "Virus") deathRate += 0.01;
+      if (state.mutationAccepted) deathRate += 0.02;
+
+      const deaths = Math.min(c.infected, Math.floor(c.infected * deathRate));
+      if (deaths > 0) {
+        c.infected -= deaths;
+        c.dead += deaths;
+        state.globalInfected -= deaths;
+        state.globalDead += deaths;
+      }
+    });
+  }
+
+  function applyTreatment() {
+    if (!state.treatmentTriggered || state.treatmentType === "None") return;
+
+    const c = continentData[state.treatmentLocation];
+    if (!c) return;
+
+    if (c.infected <= 0) return;
+
+    let baseCure = state.treatmentStrength;
+
+    // bacteria + antibiotic
+    if (state.pathogenType === "Bacteria" && state.treatmentType === "Antibiotic") {
+      baseCure += 2;
+      if (state.mutationAccepted) {
+        baseCure -= 2; // antibiotic resistance style effect
+      }
+    }
+
+    // virus + vaccine
+    if (state.pathogenType === "Virus" && state.treatmentType === "Vaccine") {
+      baseCure += 2;
+    }
+
+    // virus + antiviral
+    if (state.pathogenType === "Virus" && state.treatmentType === "Antiviral") {
+      baseCure += 1;
+    }
+
+    // isolation works for both but less strongly
+    if (state.treatmentType === "Isolation") {
+      baseCure += 1;
+    }
+
+    baseCure = Math.max(0, baseCure);
+
+    const cured = Math.min(c.infected, Math.floor(baseCure + (c.infected * 0.08)));
+    if (cured > 0) {
+      c.infected -= cured;
+      c.cured += cured;
+      state.globalInfected -= cured;
+      state.globalCured += cured;
+
+      addLog(`Day ${state.day}: ${state.treatmentType} reduced cases in ${state.treatmentLocation} by ${cured}.`);
+    }
+  }
+
+  function responseEvents() {
+    if (state.day === 5) {
+      if (state.visibility >= 2) addLog("Global health agencies begin tracking the outbreak.");
+      if (state.vector === "Airborne") addLog("Air travel advisories issued due to rapid respiratory spread.");
+      if (state.vector === "Waterborne") addLog("Ports and water systems are being monitored.");
+    }
+
+    if (state.day === 8) {
+      if (state.globalInfected > 80) addLog("Multiple governments announce emergency public health responses.");
+      if (state.globalDead > 20) addLog("Hospitals report rising fatalities and system strain.");
+    }
+
+    if (state.day === 12 && state.mutationAccepted) {
+      addLog("Scientists report the pathogen has mutated, reducing treatment effectiveness.");
+    }
+  }
+
+  function pauseForTreatment() {
+    state.paused = true;
+    displays.status.textContent = "Treatment decision";
+    pauseBtn.textContent = "Resume";
+
+    const title = document.getElementById("treatmentTitle");
+    const text = document.getElementById("treatmentText");
+    const select = document.getElementById("treatmentChoice");
+
+    select.innerHTML = "";
+
+    if (state.pathogenType === "Virus") {
+      title.textContent = "Treatment Response: Virus";
+      text.textContent = "A response team is ready. Choose a vaccine, antiviral, or no action.";
+      ["None", "Vaccine", "Antiviral", "Isolation"].forEach(opt => {
+        const o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        select.appendChild(o);
+      });
+    } else {
+      title.textContent = "Treatment Response: Bacteria";
+      text.textContent = "A response team is ready. Choose an antibiotic, isolation, or no action.";
+      ["None", "Antibiotic", "Isolation"].forEach(opt => {
+        const o = document.createElement("option");
+        o.value = opt;
+        o.textContent = opt;
+        select.appendChild(o);
+      });
+    }
+
+    modalTreatment.classList.remove("hidden");
+    addLog("Treatment opportunity available.");
+  }
+
+  document.getElementById("saveTreatmentBtn").addEventListener("click", () => {
+    const choice = document.getElementById("treatmentChoice").value;
+    const location = document.getElementById("treatmentLocation").value;
+
+    state.treatmentType = choice;
+    state.treatmentLocation = location;
+
+    // base treatment strengths
+    if (choice === "None") state.treatmentStrength = 0;
+    if (choice === "Vaccine") state.treatmentStrength = 3;
+    if (choice === "Antiviral") state.treatmentStrength = 2;
+    if (choice === "Antibiotic") state.treatmentStrength = 3;
+    if (choice === "Isolation") state.treatmentStrength = 2;
+
+    continentData[location].treated = choice !== "None";
+
+    if (choice !== "None") {
+      const c = continentData[location];
+      createTreatmentDot(c.x, c.y);
+      addLog(`${choice} deployed in ${location}.`);
+    } else {
+      addLog("No treatment deployed.");
+    }
+
+    modalTreatment.classList.add("hidden");
+    state.paused = false;
+    displays.status.textContent = "Simulation running";
+    pauseBtn.textContent = "Pause";
+  });
+
+  function pauseForMutation() {
+    state.paused = true;
+    displays.status.textContent = "Mutation decision";
+    pauseBtn.textContent = "Resume";
+    modalMutation.classList.remove("hidden");
+    addLog("Mutation opportunity available.");
+  }
+
+  document.getElementById("acceptMutationBtn").addEventListener("click", () => {
+    state.mutationAccepted = true;
+
+    const roll = Math.floor(Math.random() * 4);
+    if (roll === 0) {
+      state.infectivity = Math.min(3, state.infectivity + 1);
+      addLog("Mutation accepted: Infectivity increased!");
+    } else if (roll === 1) {
+      state.lethality = Math.min(3, state.lethality + 1);
+      addLog("Mutation accepted: Lethality increased!");
+    } else if (roll === 2) {
+      state.internationalBonus += 0.08;
+      addLog("Mutation accepted: International transmission increased!");
+    } else {
+      addLog("Mutation accepted: Treatment resistance increased!");
+    }
+
+    state.totalScore = state.lethality + state.infectivity + state.visibility;
+    displays.score.textContent = state.totalScore;
+
+    modalMutation.classList.add("hidden");
+    state.paused = false;
+    displays.status.textContent = "Simulation running";
+    pauseBtn.textContent = "Pause";
+  });
+
+  document.getElementById("declineMutationBtn").addEventListener("click", () => {
+    addLog("Mutation declined.");
+    modalMutation.classList.add("hidden");
+    state.paused = false;
+    displays.status.textContent = "Simulation running";
+    pauseBtn.textContent = "Pause";
+  });
+
+  function checkEndConditions() {
+    // eradicated
+    if (state.globalInfected <= 0) {
+      endGame(false, `${state.diseaseName} was eradicated by public health response.`);
+      return;
+    }
+
+    // everyone dead or infected/collapsed
+    const totalAffected = state.globalInfected + state.globalDead + state.globalCured;
+    if (state.globalDead >= TOTAL_WORLD_POP * 0.65 || totalAffected >= TOTAL_WORLD_POP) {
+      endGame(true, `${state.diseaseName} overwhelmed the world.`);
+      return;
+    }
+
+    // hard stop if game goes long
+    if (state.day >= 25) {
+      if (state.globalInfected > state.globalCured) {
+        endGame(true, `${state.diseaseName} outlasted global control efforts.`);
+      } else {
+        endGame(false, `Global response contained ${state.diseaseName}.`);
+      }
+    }
+  }
+
+  function endGame(pathogenWins, message) {
+    state.ended = true;
+    state.running = false;
+    clearInterval(state.timer);
+    pauseBtn.disabled = true;
+    displays.status.textContent = pathogenWins ? "Pathogen wins" : "Humans win";
+
+    endBanner.className = "end-banner " + (pathogenWins ? "win" : "lose");
+    endBanner.textContent = pathogenWins
+      ? `☠️ PATHOGEN WINS: ${message}`
+      : `🛡️ HUMANITY WINS: ${message}`;
+
+    addLog(message);
+  }
+
+  function updateBars() {
+    displays.infectedNum.textContent = state.globalInfected;
+    displays.deadNum.textContent = state.globalDead;
+    displays.curedNum.textContent = state.globalCured;
+
+    displays.infectedBar.style.width = Math.min(100, (state.globalInfected / TOTAL_WORLD_POP) * 100) + "%";
+    displays.deadBar.style.width = Math.min(100, (state.globalDead / TOTAL_WORLD_POP) * 100) + "%";
+    displays.curedBar.style.width = Math.min(100, (state.globalCured / TOTAL_WORLD_POP) * 100) + "%";
+  }
+
+  function addLog(msg) {
+    const div = document.createElement("div");
+    div.textContent = msg;
+    logBox.appendChild(div);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function clearMapEffects() {
+    mapWrapper.querySelectorAll(".infection-dot, .outbreak-ring, .travel-line, .treatment-dot").forEach(el => el.remove());
+  }
+
+  function randomSpreadPoint(c) {
+    const x = c.x + (Math.random() * 2 - 1) * c.spreadX;
+    const y = c.y + (Math.random() * 2 - 1) * c.spreadY;
+    return {
+      x: Math.max(2, Math.min(98, x)),
+      y: Math.max(2, Math.min(98, y))
+    };
+  }
+
+  function createInfectionDot(xPercent, yPercent) {
+    const dot = document.createElement("div");
+    dot.className = "infection-dot";
+    dot.style.left = xPercent + "%";
+    dot.style.top = yPercent + "%";
+    mapWrapper.appendChild(dot);
+  }
+
+  function createTreatmentDot(xPercent, yPercent) {
+    const dot = document.createElement("div");
+    dot.className = "treatment-dot";
+    dot.style.left = xPercent + "%";
+    dot.style.top = yPercent + "%";
+    mapWrapper.appendChild(dot);
+  }
+
+  function createOutbreakRing(xPercent, yPercent) {
+    const ring = document.createElement("div");
+    ring.className = "outbreak-ring";
+    ring.style.left = xPercent + "%";
+    ring.style.top = yPercent + "%";
+    mapWrapper.appendChild(ring);
+    setTimeout(() => ring.remove(), 1200);
+  }
+
+  function drawTravelLine(fromName, toName) {
+    const from = continentData[fromName];
+    const to = continentData[toName];
+
+    const line = document.createElement("div");
+    line.className = "travel-line";
+
+    const x1 = from.x;
+    const y1 = from.y;
+    const x2 = to.x;
+    const y2 = to.y;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+    line.style.left = x1 + "%";
+    line.style.top = y1 + "%";
+    line.style.width = dist + "%";
+    line.style.transform = `rotate(${angle}deg)`;
+
+    mapWrapper.appendChild(line);
+    setTimeout(() => line.remove(), 1400);
+  }
+})();
+</script>
+</body>
+</html>
