@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Global Pathogen Evolution Simulator</title>
+  <style>
+    :root {
+      --bg1:#07111f; --bg2:#0e2740; --panel:#10273dcc; --panelSolid:#122b44;
+      --accent:#35d0ff; --accent2:#ff4d6d; --good:#39d98a; --warn:#ffd166; --bad:#ff6b6b;
+      --text:#e9f7ff; --muted:#9fc2d6; --purple:#8a6bff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:radial-gradient(circle at top,var(--bg2),var(--bg1) 55%);color:var(--text)}
+    .wrap{max-width:1200px;margin:0 auto;padding:16px}
+    h1{margin:6px 0 14px;text-align:center;color:var(--accent);text-shadow:0 0 10px rgba(53,208,255,.35)}
+    .topbar{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:12px}
+    .card{background:var(--panel);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(8px);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .stats{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px;padding:12px}
+    .stat{background:rgba(255,255,255,.05);padding:10px;border-radius:12px;text-align:center}
+    .stat .label{font-size:12px;color:var(--muted)} .stat .value{font-size:22px;font-weight:700}
+    .main{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+    .mapPanel{position:relative;padding:10px}
+    .mapWrap{position:relative;width:100%;aspect-ratio:16/9;border-radius:18px;overflow:hidden;background:linear-gradient(180deg,#0b4f6c,#0b2940)}
+    svg{width:100%;height:100%;display:block}
+    .continent{fill:#2d5875;stroke:#6fc7ff;stroke-width:2;cursor:pointer;transition:.2s}
+    .continent:hover{fill:#3a7396}
+    .continent.selected{fill:#6a4cff}
+    .dot{position:absolute;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle,#ff9aa2,#ff2e63);transform:translate(-50%,-50%);box-shadow:0 0 12px #ff2e63;pointer-events:none}
+    .pulse{position:absolute;border:2px solid rgba(255,70,110,.7);border-radius:50%;transform:translate(-50%,-50%);animation:pulse 1.8s ease-out infinite;pointer-events:none}
+    @keyframes pulse{0%{width:8px;height:8px;opacity:1}100%{width:70px;height:70px;opacity:0}}
+    .controls{padding:12px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+    button{background:linear-gradient(135deg,var(--accent),#1ba7ff);color:#00233b;border:none;padding:10px 14px;border-radius:12px;font-weight:700;cursor:pointer}
+    button.secondary{background:linear-gradient(135deg,#324a5f,#1c3146);color:var(--text)}
+    button.danger{background:linear-gradient(135deg,#ff6b6b,#ff2e63);color:white}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .side{display:grid;gap:14px}
+    .panel{padding:12px}
+    .log{height:280px;overflow:auto;background:rgba(255,255,255,.04);padding:10px;border-radius:12px;font-size:13px;line-height:1.4}
+    .bar{height:14px;background:rgba(255,255,255,.08);border-radius:999px;overflow:hidden}
+    .fill{height:100%;width:0%}
+    .red{background:linear-gradient(90deg,#ff6b6b,#ff2e63)} .green{background:linear-gradient(90deg,#1fd67b,#7dffb1)} .purple{background:linear-gradient(90deg,#8a6bff,#c3a6ff)}
+    .tiny{font-size:12px;color:var(--muted)}
+    .modalBg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .hidden{display:none}
+    .modal{width:min(760px,94vw);max-height:90vh;overflow:auto;background:linear-gradient(180deg,#12304d,#0e2134);border:1px solid rgba(255,255,255,.08);border-radius:18px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .choice{padding:10px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.04)}
+    input[type=text]{width:100%;padding:10px;border-radius:10px;border:1px solid #3c5f7a;background:#0b1e2f;color:white}
+    label{font-size:14px}
+    input[type=range]{width:100%}
+    .footer{margin-top:10px;display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+    .end{font-size:22px;font-weight:700;text-align:center;padding:16px;border-radius:16px}
+    .teacher{margin-top:8px;padding:10px;background:rgba(255,255,255,.04);border-radius:12px}
+    @media(max-width:900px){.main{grid-template-columns:1fr}.stats{grid-template-columns:repeat(3,1fr)}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🦠 Global Pathogen Evolution Simulator</h1>
+
+  <div class="card topbar">
+    <div class="stats" id="statsBar">
+      <div class="stat"><div class="label">Day</div><div class="value" id="dayVal">0</div></div>
+      <div class="stat"><div class="label">Infected</div><div class="value" id="infectedVal">0</div></div>
+      <div class="stat"><div class="label">Deaths</div><div class="value" id="deadVal">0</div></div>
+      <div class="stat"><div class="label">Cured / Immune</div><div class="value" id="curedVal">0</div></div>
+      <div class="stat"><div class="label">Continents</div><div class="value" id="continentsVal">0/6</div></div>
+      <div class="stat"><div class="label">Status</div><div class="value" id="statusVal">Planning</div></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="card mapPanel">
+      <div class="mapWrap" id="mapWrap">
+        <svg viewBox="0 0 1000 560" aria-label="World map">
+          <rect x="0" y="0" width="1000" height="560" fill="url(#ocean)"/>
+          <defs>
+            <linearGradient id="ocean" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#0e5570"/>
+              <stop offset="100%" stop-color="#09263c"/>
+            </linearGradient>
+          </defs>
+          <path id="northAmerica" class="continent" d="M80,110 L210,70 L310,95 L330,155 L275,210 L230,240 L160,230 L120,180 L90,150 Z"></path>
+          <path id="southAmerica" class="continent" d="M270,255 L325,285 L350,345 L335,445 L290,510 L250,470 L245,390 L255,320 Z"></path>
+          <path id="europe" class="continent" d="M470,105 L545,95 L590,125 L565,165 L500,160 L455,135 Z"></path>
+          <path id="africa" class="continent" d="M500,185 L585,205 L620,300 L585,455 L520,490 L475,430 L460,300 Z"></path>
+          <path id="asia" class="continent" d="M590,100 L780,85 L900,145 L885,245 L785,285 L650,250 L600,205 L565,145 Z"></path>
+          <path id="australia" class="continent" d="M790,395 L890,390 L925,445 L875,495 L785,480 L760,430 Z"></path>
+        </svg>
+      </div>
+      <div class="controls">
+        <div class="row">
+          <button id="goBtn" disabled>▶ Go</button>
+          <button id="pauseBtn" class="secondary" disabled>⏸ Pause</button>
+          <button id="speedBtn" class="secondary" disabled>⏩ Speed: 1x</button>
+          <button id="resetBtn" class="danger">↺ Reset</button>
+        </div>
+        <div class="tiny">Click a continent to choose the release location during setup. During the simulation, outbreaks pulse on infected continents. Longer simulation, treatment spread, and mutation/treatment choices are included for classroom discussion.</div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card panel">
+        <h3>Pathogen Traits</h3>
+        <div class="tiny" id="traitSummary">Set up your pathogen to begin.</div>
+        <div class="row"><div style="flex:1">Resistance / Escape</div></div>
+        <div class="bar"><div id="resistanceFill" class="fill purple"></div></div>
+        <div class="tiny" id="resistanceLabel">0%</div>
+        <div class="row" style="margin-top:10px"><div style="flex:1">Global Treatment Coverage</div></div>
+        <div class="bar"><div id="treatmentFill" class="fill green"></div></div>
+        <div class="tiny" id="treatmentLabel">0%</div>
+      </div>
+
+      <div class="card panel">
+        <h3>Event Log</h3>
+        <div id="log" class="log"></div>
+      </div>
+
+      <div class="card panel">
+        <h3>Teacher Notes</h3>
+        <div class="teacher tiny">
+          <b>Learning ideas:</b> Compare bacteria vs. viruses, discuss why antibiotics only affect bacteria, model resistance, evaluate how vectors and travel change spread, and ask students to explain why treatment coverage can outpace spread—or fail.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Setup Modal -->
+<div id="setupModal" class="modalBg">
+  <div class="modal">
+    <h2>Create Your Pathogen</h2>
+    <div class="grid2">
+      <div class="choice">
+        <label>Pathogen Name</label>
+        <input id="pathogenName" type="text" maxlength="24" placeholder="e.g. NovaFlu / Resistobac" />
+      </div>
+      <div class="choice">
+        <label>Pathogen Type</label>
+        <div class="row">
+          <label><input type="radio" name="ptype" value="virus" checked> Virus</label>
+          <label><input type="radio" name="ptype" value="bacteria"> Bacteria</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="choice" style="margin-top:12px">
+      <b>Step 1:</b> Close this box, then click a continent on the map to choose the release location.
+    </div>
+
+    <div class="choice" style="margin-top:12px">
+      <b>Symptoms (choose 1–3)</b>
+      <div class="grid2">
+        <label><input type="checkbox" class="symptom" value="Sneezing"> Sneezing</label>
+        <label><input type="checkbox" class="symptom" value="Coughing"> Coughing</label>
+        <label><input type="checkbox" class="symptom" value="Fever"> Fever</label>
+        <label><input type="checkbox" class="symptom" value="Sweating"> Sweating</label>
+        <label><input type="checkbox" class="symptom" value="Vomiting"> Vomiting</label>
+      </div>
+    </div>
+
+    <div class="choice" style="margin-top:12px">
+      <b>Vector</b>
+      <div class="row">
+        <label><input type="radio" name="vector" value="rodent" checked> Rodent</label>
+        <label><input type="radio" name="vector" value="insect"> Insect</label>
+        <label><input type="radio" name="vector" value="waterborne"> Waterborne</label>
+        <label><input type="radio" name="vector" value="airborne"> Airborne</label>
+      </div>
+    </div>
+
+    <div class="choice" style="margin-top:12px">
+      <b>Trait Sliders</b>
+      <div class="grid2">
+        <div>
+          <label>Lethality (0–3): <span id="lVal">1</span></label>
+          <input id="lethality" type="range" min="0" max="3" value="1" />
+        </div>
+        <div>
+          <label>Infectivity (0–3): <span id="iVal">1</span></label>
+          <input id="infectivity" type="range" min="0" max="3" value="1" />
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <label>Visibility (1–3): <span id="vVal">1</span></label>
+        <input id="visibility" type="range" min="1" max="3" value="1" />
+      </div>
+      <div style="margin-top:8px"><b>Total Score:</b> <span id="totalScore">3</span></div>
+      <div class="tiny">Suggested classroom rule: infectivity scales with total score. 2 = infects ~0.5 people/day, 3 = 1/day, 4 = 2/day, 5 = 3/day, 6 = 4/day, 7+ = 5–6/day with outbreaks.</div>
+    </div>
+
+    <div class="footer">
+      <button id="closeSetup">Close Setup</button>
+      <button id="finishSetup">Finish Setup</button>
+    </div>
+  </div>
+</div>
+
+<!-- Treatment Modal -->
+<div id="treatmentModal" class="modalBg hidden">
+  <div class="modal">
+    <h2>Global Response: Treatment Available</h2>
+    <p>Select a first deployment region. After deployment, treatment will gradually become available to additional countries/continents over time.</p>
+    <div class="row" id="treatmentChoices"></div>
+    <div class="choice" style="margin-top:12px">
+      <b>Response Type</b>
+      <div class="row" id="responseTypeBox"></div>
+    </div>
+    <div class="footer"><button id="confirmTreatment">Deploy Treatment</button></div>
+  </div>
+</div>
+
+<!-- Mutation Modal -->
+<div id="mutationModal" class="modalBg hidden">
+  <div class="modal">
+    <h2>Mutation Opportunity</h2>
+    <p>Choose whether the pathogen mutates. Viruses gain immune escape more easily; bacteria can gain antibiotic resistance faster.</p>
+    <div class="grid2">
+      <button id="mutateYes">🧬 Mutate</button>
+      <button id="mutateNo" class="secondary">Stay Stable</button>
+    </div>
+  </div>
+</div>
+
+<!-- End Modal -->
+<div id="endModal" class="modalBg hidden">
+  <div class="modal">
+    <div id="endText" class="end"></div>
+    <div class="teacher">
+      <b>Reflection prompts:</b>
+      <ul>
+        <li>Why did this pathogen spread (or fail)?</li>
+        <li>How did vector choice affect geography?</li>
+        <li>Why would bacteria evolve antibiotic resistance but viruses avoid antibiotics?</li>
+        <li>How did global treatment coverage change the outcome?</li>
+      </ul>
+    </div>
+    <div class="footer"><button id="playAgain">Play Again</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const continents = {
+    northAmerica:{name:'North America', x:210, y:155, pop:600, coast:0.65, airport:0.9, boat:0.7, climate:'temperate', infected:0, dead:0, cured:0, treated:false, discovered:false},
+    southAmerica:{name:'South America', x:295, y:360, pop:430, coast:0.75, airport:0.6, boat:0.7, climate:'tropical', infected:0, dead:0, cured:0, treated:false, discovered:false},
+    europe:{name:'Europe', x:525, y:130, pop:750, coast:0.7, airport:1.0, boat:0.65, climate:'temperate', infected:0, dead:0, cured:0, treated:false, discovered:false},
+    africa:{name:'Africa', x:540, y:315, pop:1400, coast:0.6, airport:0.55, boat:0.6, climate:'tropical', infected:0, dead:0, cured:0, treated:false, discovered:false},
+    asia:{name:'Asia', x:735, y:185, pop:4700, coast:0.55, airport:0.95, boat:0.8, climate:'mixed', infected:0, dead:0, cured:0, treated:false, discovered:false},
+    australia:{name:'Australia', x:840, y:440, pop:45, coast:0.9, airport:0.7, boat:0.85, climate:'temperate', infected:0, dead:0, cured:0, treated:false, discovered:false}
+  };
+
+  const state = {
+    running:false, day:0, speed:1, interval:null, setupDone:false,
+    pathogen:{name:'', type:'virus', symptoms:[], vector:'rodent', lethality:1, infectivity:1, visibility:1, total:3, release:null, resistance:0},
+    events:{treatmentShown:false, mutationShown:false, treatmentType:null, treatmentCoverage:0, treatmentFrontier:[]}
+  };
+
+  const $ = id => document.getElementById(id);
+  const logEl = $('log');
+  const mapWrap = $('mapWrap');
+  const goBtn = $('goBtn'); const pauseBtn = $('pauseBtn'); const speedBtn = $('speedBtn');
+
+  function log(msg){ const d=document.createElement('div'); d.innerHTML=`<b>Day ${state.day}:</b> ${msg}`; logEl.prepend(d); }
+  function sumPop(){ return Object.values(continents).reduce((a,c)=>a+c.pop,0); }
+  function totals(){
+    const infected = Object.values(continents).reduce((a,c)=>a+c.infected,0);
+    const dead = Object.values(continents).reduce((a,c)=>a+c.dead,0);
+    const cured = Object.values(continents).reduce((a,c)=>a+c.cured,0);
+    const active = Object.values(continents).filter(c=>c.infected>0).length;
+    return {infected,dead,cured,active};
+  }
+  function updateStats(){
+    const t = totals();
+    $('dayVal').textContent = state.day;
+    $('infectedVal').textContent = Math.round(t.infected).toLocaleString();
+    $('deadVal').textContent = Math.round(t.dead).toLocaleString();
+    $('curedVal').textContent = Math.round(t.cured).toLocaleString();
+    $('continentsVal').textContent = `${t.active}/6`;
+    $('statusVal').textContent = state.running ? 'Running' : (state.setupDone ? 'Ready' : 'Planning');
+    $('resistanceFill').style.width = `${Math.min(100,state.pathogen.resistance)}%`;
+    $('resistanceLabel').textContent = `${Math.round(state.pathogen.resistance)}%`;
+    $('treatmentFill').style.width = `${Math.min(100,state.events.treatmentCoverage)}%`;
+    $('treatmentLabel').textContent = `${Math.round(state.events.treatmentCoverage)}%`;
+    $('traitSummary').textContent = `${state.pathogen.name || 'Unnamed'} (${state.pathogen.type}) • Vector: ${state.pathogen.vector} • Score: ${state.pathogen.total}`;
+  }
+
+  function reproductionRate(score){
+    if(score < 2) return 0;
+    if(score === 2) return 0.5;
+    if(score === 3) return 1;
+    if(score === 4) return 2;
+    if(score === 5) return 3;
+    if(score === 6) return 4;
+    return 5.5;
+  }
+
+  function vectorBonus(cont){
+    const v = state.pathogen.vector;
+    if(v==='airborne') return 1.3 + cont.airport*0.2;
+    if(v==='waterborne') return 1 + cont.coast*0.5;
+    if(v==='insect') return 1 + (cont.climate==='tropical' ? 0.45 : 0.15);
+    if(v==='rodent') return 1 + (cont.pop > 700 ? 0.35 : 0.15);
+    return 1;
+  }
+
+  function visibilityPenalty(){ return 1 - (state.pathogen.visibility-1)*0.08; }
+
+  function placeOutbreak(id){
+    const c = continents[id];
+    const rect = mapWrap.getBoundingClientRect();
+    const x = c.x/1000*rect.width, y = c.y/560*rect.height;
+    const dot = document.createElement('div'); dot.className='dot'; dot.style.left=`${x}px`; dot.style.top=`${y}px`;
+    const pulse = document.createElement('div'); pulse.className='pulse'; pulse.style.left=`${x}px`; pulse.style.top=`${y}px`;
+    dot.dataset.cid=id; pulse.dataset.cid=id;
+    mapWrap.appendChild(pulse); mapWrap.appendChild(dot);
+  }
+  function clearOutbreak(id){
+    [...mapWrap.querySelectorAll(`[data-cid="${id}"]`)].forEach(el=>el.remove());
+  }
+
+  function revealTreatmentProgress(){
+    if(!state.events.treatmentType) return;
+    // each day, treatment becomes more available globally
+    const increase = state.pathogen.type==='bacteria' ? 7 : 5;
+    state.events.treatmentCoverage = Math.min(100, state.events.treatmentCoverage + increase);
+    const untreated = Object.keys(continents).filter(k=>!continents[k].treated);
+    if(untreated.length && Math.random() < 0.55){
+      const next = untreated[Math.floor(Math.random()*untreated.length)];
+      continents[next].treated = true;
+      log(`${state.events.treatmentType} access expanded to ${continents[next].name}.`);
+    }
+  }
+
+  function spreadInternational(){
+    const infectedKeys = Object.keys(continents).filter(k=>continents[k].infected > 50);
+    const uninfected = Object.keys(continents).filter(k=>continents[k].infected <= 0);
+    if(!infectedKeys.length || !uninfected.length) return;
+    let chance = 0.12 + state.day*0.002;
+    if(state.pathogen.vector==='airborne') chance += 0.15;
+    if(state.pathogen.vector==='waterborne') chance += 0.06;
+    if(Math.random() < chance){
+      const from = infectedKeys[Math.floor(Math.random()*infectedKeys.length)];
+      const to = uninfected[Math.floor(Math.random()*uninfected.length)];
+      const mode = (Math.random() < (state.pathogen.vector==='airborne' ? 0.7 : 0.4)) ? 'airplane' : 'boat';
+      continents[to].infected = Math.max(continents[to].infected, 8 + Math.floor(Math.random()*25));
+      continents[to].discovered = true;
+      placeOutbreak(to);
+      log(`${state.pathogen.name} spread from ${continents[from].name} to ${continents[to].name} via ${mode}.`);
+    }
+  }
+
+  function step(){
+    state.day++;
+
+    // scripted events later for longer simulation
+    if(state.day === 8 && !state.events.treatmentShown){ showTreatmentModal(); }
+    if(state.day === 15 && !state.events.mutationShown){ showMutationModal(); }
+
+    Object.entries(continents).forEach(([id,c]) => {
+      if(c.infected <= 0) return;
+      const healthy = Math.max(0, c.pop - c.infected - c.dead - c.cured);
+      let r = reproductionRate(state.pathogen.total) * vectorBonus(c) * visibilityPenalty();
+      if(c.treated){
+        const treatmentStrength = state.pathogen.type==='bacteria' ? 0.35 : 0.25;
+        const escapeFactor = 1 - (state.pathogen.resistance/100) * (state.pathogen.type==='bacteria' ? 0.8 : 0.6);
+        r *= Math.max(0.1, 1 - treatmentStrength * (state.events.treatmentCoverage/100) * escapeFactor);
+      }
+
+      // growth based on currently infected pool, capped by healthy population
+      let newInfections = c.infected * (r/12);
+      if(state.pathogen.total >= 7 && Math.random() < 0.22) newInfections *= 1.8; // outbreak burst
+      newInfections = Math.min(healthy, Math.max(0, newInfections));
+
+      // deaths and cures
+      const deathRate = 0.002 + state.pathogen.lethality*0.004;
+      let deaths = c.infected * deathRate;
+      let cures = 0;
+      if(c.treated){
+        cures = c.infected * (0.015 + state.events.treatmentCoverage/3000);
+      }
+
+      c.infected += newInfections - deaths - cures;
+      c.dead += deaths;
+      c.cured += cures;
+
+      if(c.infected < 1){ c.infected = 0; clearOutbreak(id); }
+    });
+
+    if(state.day >= 5) spreadInternational();
+    if(state.events.treatmentType) revealTreatmentProgress();
+
+    // resistance / immune escape pressure
+    if(state.events.treatmentType){
+      const pressure = state.pathogen.type==='bacteria' ? 3.5 : 2.5;
+      if(Math.random() < 0.45) state.pathogen.resistance = Math.min(100, state.pathogen.resistance + pressure);
+    }
+
+    updateStats();
+    checkEnd();
+  }
+
+  function checkEnd(){
+    const t = totals();
+    const world = sumPop();
+    if(t.infected <= 0){
+      endGame(`🛡️ Eradicated! ${state.pathogen.name || 'The pathogen'} was eliminated by treatment, immunity, or low spread.`);
+      return;
+    }
+    if(t.dead >= world * 0.6 || (t.infected + t.dead) >= world * 0.98){
+      endGame(`☠️ Global Collapse! ${state.pathogen.name || 'The pathogen'} overwhelmed the world.`);
+      return;
+    }
+    if(state.day >= 60){
+      const msg = t.infected > t.cured ? `⏳ End of Simulation: The pathogen persists after 60 days.` : `⏳ End of Simulation: Public health response is gaining control after 60 days.`;
+      endGame(msg);
+    }
+  }
+
+  function endGame(msg){
+    clearInterval(state.interval); state.running=false;
+    $('endText').textContent = msg;
+    $('endModal').classList.remove('hidden');
+    updateStats();
+  }
+
+  function startGame(){
+    if(!state.setupDone || !state.pathogen.release) return alert('Finish setup and click a continent to release the pathogen first.');
+    if(state.running) return;
+    const release = continents[state.pathogen.release];
+    if(release.infected <= 0){ release.infected = 12; release.discovered=true; placeOutbreak(state.pathogen.release); }
+    state.running = true;
+    goBtn.disabled = true; pauseBtn.disabled = false; speedBtn.disabled = false;
+    log(`${state.pathogen.name} released in ${release.name}.`);
+    runTimer(); updateStats();
+  }
+  function runTimer(){
+    clearInterval(state.interval);
+    const ms = state.speed===1 ? 900 : state.speed===2 ? 500 : 220;
+    state.interval = setInterval(step, ms);
+  }
+  function pauseGame(){
+    if(!state.running) return;
+    clearInterval(state.interval); state.running=false; goBtn.disabled=false; updateStats();
+  }
+  function resetGame(){ location.reload(); }
+
+  // Setup controls
+  const lethality = $('lethality'), infectivity = $('infectivity'), visibility = $('visibility');
+  function updateScore(){
+    $('lVal').textContent = lethality.value; $('iVal').textContent = infectivity.value; $('vVal').textContent = visibility.value;
+    const total = +lethality.value + +infectivity.value + +visibility.value;
+    $('totalScore').textContent = total;
+  }
+  [lethality,infectivity,visibility].forEach(el=>el.addEventListener('input', updateScore)); updateScore();
+
+  $('closeSetup').onclick = () => $('setupModal').classList.add('hidden');
+  $('finishSetup').onclick = () => {
+    const name = $('pathogenName').value.trim() || 'Pathogen-X';
+    const type = [...document.querySelectorAll('input[name="ptype"]')].find(r=>r.checked).value;
+    const symptoms = [...document.querySelectorAll('.symptom:checked')].map(x=>x.value).slice(0,3);
+    const vector = [...document.querySelectorAll('input[name="vector"]')].find(r=>r.checked).value;
+    state.pathogen = { ...state.pathogen, name, type, symptoms, vector, lethality:+lethality.value, infectivity:+infectivity.value, visibility:+visibility.value, total:(+lethality.value + +infectivity.value + +visibility.value), resistance:0 };
+    state.setupDone = true;
+    $('setupModal').classList.add('hidden');
+    goBtn.disabled = false;
+    log(`Configured ${name} (${type}) with ${vector} transmission.`);
+    updateStats();
+  };
+
+  // map clicks
+  document.querySelectorAll('.continent').forEach(el=>{
+    el.addEventListener('click',()=>{
+      document.querySelectorAll('.continent').forEach(c=>c.classList.remove('selected'));
+      el.classList.add('selected');
+      state.pathogen.release = el.id;
+      log(`Release location selected: ${continents[el.id].name}.`);
+    });
+  });
+
+  // Treatment modal
+  function showTreatmentModal(){
+    state.events.treatmentShown = true;
+    const box = $('treatmentChoices'); box.innerHTML='';
+    Object.entries(continents).forEach(([k,c])=>{
+      const b = document.createElement('button'); b.textContent = c.name; b.className='secondary';
+      b.onclick = ()=>{ [...box.querySelectorAll('button')].forEach(x=>x.style.outline='none'); b.style.outline='3px solid #35d0ff'; box.dataset.pick=k; };
+      box.appendChild(b);
+    });
+    const responseBox = $('responseTypeBox'); responseBox.innerHTML='';
+    const options = state.pathogen.type==='bacteria' ? ['Antibiotic','Supportive Care','Isolation'] : ['Vaccine','Antiviral','Supportive Care'];
+    options.forEach(opt=>{
+      const l=document.createElement('label'); l.innerHTML=`<input type="radio" name="rtype" value="${opt}" ${opt===options[0]?'checked':''}> ${opt}`; responseBox.appendChild(l);
+    });
+    $('treatmentModal').classList.remove('hidden');
+    log(`Public health agencies developed possible treatments.`);
+  }
+  $('confirmTreatment').onclick = () => {
+    const pick = $('treatmentChoices').dataset.pick || state.pathogen.release;
+    continents[pick].treated = true;
+    state.events.treatmentType = [...document.querySelectorAll('input[name="rtype"]')].find(r=>r.checked).value;
+    state.events.treatmentCoverage = 12;
+    $('treatmentModal').classList.add('hidden');
+    log(`${state.events.treatmentType} deployed first in ${continents[pick].name}. Access will spread globally over time.`);
+    updateStats();
+  };
+
+  // Mutation modal
+  function showMutationModal(){
+    state.events.mutationShown = true;
+    $('mutationModal').classList.remove('hidden');
+    log(`Mutation opportunity detected.`);
+  }
+  $('mutateYes').onclick = () => {
+    const isVirus = state.pathogen.type==='virus';
+    state.pathogen.resistance = Math.min(100, state.pathogen.resistance + (isVirus ? 18 : 25));
+    if(Math.random() < 0.7) state.pathogen.total = Math.min(8, state.pathogen.total + 1);
+    $('mutationModal').classList.add('hidden');
+    log(`${state.pathogen.name} mutated! ${isVirus ? 'Immune escape increased.' : 'Antibiotic resistance increased.'}`);
+    updateStats();
+  };
+  $('mutateNo').onclick = () => { $('mutationModal').classList.add('hidden'); log(`${state.pathogen.name} remained genetically stable.`); };
+
+  // buttons
+  goBtn.onclick = startGame;
+  pauseBtn.onclick = pauseGame;
+  speedBtn.onclick = () => { state.speed = state.speed===1 ? 2 : state.speed===2 ? 3 : 1; speedBtn.textContent = `⏩ Speed: ${state.speed}x`; if(state.running) runTimer(); };
+  $('resetBtn').onclick = resetGame;
+  $('playAgain').onclick = resetGame;
+
+  updateStats();
+})();
+</script>
+</body>
+</html>
